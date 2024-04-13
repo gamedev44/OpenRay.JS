@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Simple 2D Raycaster</title>
+    <title>Raycasting with 3D View and 2D Mini-map</title>
     <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; }
         canvas { width: 100vw; height: 100vh; }
     </style>
 </head>
@@ -12,8 +13,8 @@
 <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 800;
-    canvas.height = 400;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
     const map = [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -27,6 +28,7 @@
     const mapWidth = map[0].length;
     const mapHeight = map.length;
     const blockSize = 64;
+    const miniMapScale = 0.2;
 
     const player = {
         x: 160,
@@ -36,56 +38,83 @@
         speed: 3
     };
 
-    function drawMap() {
-        for (let y = 0; y < mapHeight; y++) {
-            for (let x = 0; x < mapWidth; x++) {
-                ctx.fillStyle = map[y][x] === 1 ? '#222' : '#FFF';
-                ctx.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
-            }
-        }
-    }
-
     function castRay(angle) {
         let x = player.x;
         let y = player.y;
         const deltaX = Math.cos(angle);
         const deltaY = Math.sin(angle);
 
-        while (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+        let distance = 0;
+
+        while (true) {
+            x += deltaX * 5; // Step size
+            y += deltaY * 5; // Step size
+            distance += 5;
+
             const mapX = Math.floor(x / blockSize);
             const mapY = Math.floor(y / blockSize);
 
-            if (mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight) break;
-            if (map[mapY][mapX] === 1) {
-                const dist = Math.sqrt((x - player.x) ** 2 + (y - player.y) ** 2);
-                return dist;
+            if (mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight || map[mapY][mapX] === 1) {
+                return distance;
             }
-
-            x += deltaX;
-            y += deltaY;
         }
-        return null;
     }
 
     function render3D() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height * 0.5); // Ceiling
+        ctx.fillStyle = 'gray';
+        ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5); // Floor
+
         for (let i = 0; i < canvas.width; i++) {
             const rayAngle = player.angle - player.fov / 2 + (player.fov * i / canvas.width);
             const dist = castRay(rayAngle);
-            if (dist) {
-                const wallHeight = (canvas.height / dist) * 50; // Calculate the height of the wall slice
-                const drawStart = (canvas.height / 2) - (wallHeight / 2); // Middle of the screen minus half the wall height
-                ctx.fillStyle = 'rgb(200, 200, 200)';
-                ctx.fillRect(i, drawStart, 1, wallHeight); // Draw a vertical slice
+            const wallHeight = (canvas.height * blockSize) / (dist * Math.cos(rayAngle - player.angle));
+            const drawStart = (canvas.height / 2) - (wallHeight / 2);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, ' + (1 - dist / 500) + ')';
+            ctx.fillRect(i, drawStart, 1, wallHeight);
+        }
+    }
+
+    function drawMiniMap() {
+        const miniMapWidth = mapWidth * blockSize * miniMapScale;
+        const miniMapHeight = mapHeight * blockSize * miniMapScale;
+        ctx.save();
+        ctx.translate(canvas.width - miniMapWidth - 20, 20);
+        ctx.scale(miniMapScale, miniMapScale);
+
+        for (let y = 0; y < mapHeight; y++) {
+            for (let x = 0; x < mapWidth; x++) {
+                ctx.fillStyle = map[y][x] === 1 ? 'red' : 'white';
+                ctx.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
             }
         }
+
+        // Draw player on mini-map
+        ctx.fillStyle = 'blue';
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
     }
 
     function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawMap();
         render3D();
+        drawMiniMap();
         requestAnimationFrame(gameLoop);
     }
+
+    document.addEventListener('keydown', (e) => {
+        switch (e.key) {
+            case 'ArrowLeft': player.angle -= 0.1; break;
+            case 'ArrowRight': player.angle += 0.1; break;
+            case 'ArrowUp': player.x += Math.cos(player.angle) * player.speed; player.y += Math.sin(player.angle) * player.speed; break;
+            case 'ArrowDown': player.x -= Math.cos(player.angle) * player.speed; player.y -= Math.sin(player.angle) * player.speed; break;
+        }
+    });
 
     gameLoop();
 </script>
